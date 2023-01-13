@@ -14,6 +14,7 @@ from data import train_dataset, test_dataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--local_rank", type=int, default=-1)
+parser.add_argument("--syncBN", type=bool, default=True)
 args = parser.parse_args()
 
 torch.cuda.set_device(args.local_rank)
@@ -41,6 +42,9 @@ if args.local_rank == 0:
 train_sampler = DistributedSampler(train_dataset)
 train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size)
 
+if args.syncBN:
+    model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
 
 for i, (inputs, labels) in enumerate(train_loader):
@@ -48,7 +52,7 @@ for i, (inputs, labels) in enumerate(train_loader):
     inputs = inputs.to(device)
     labels = labels.to(device)
     outputs = model(inputs)
-    loss = criterion(outputs, labels)
+    loss = criterion(outputs[0], labels)
     # backward
     optimizer.zero_grad()
     loss.backward()
